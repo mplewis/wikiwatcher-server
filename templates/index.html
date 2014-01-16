@@ -106,8 +106,16 @@
       padding-right: 3px;
       padding-bottom: 1px;
     }
-    .story-comment {
+    ul {
+      list-style-type: none;
+    }
+    .change-info {
+      margin-bottom: 10px;
+    }
+    .change-comment {
+      margin-top: 5px;
       margin-left: 40px;
+      margin-bottom: 0;
     }
     </style>
   </head>
@@ -164,7 +172,7 @@
 
       <ul>
         {% for change in recent_changes %}
-          <li>
+          <li class="change-info">
             <strong>{{ change.user.username }}</strong>
             {% if change.change_type == 'new' %}
               created page
@@ -179,6 +187,9 @@
               {{ change_scores[change.id] }}
               wikipoints.
             </span>
+            <p class="change-comment">
+              <em>{{ change.comment }}</em>
+            </p>
           </li>
         {% endfor %}
       </ul>

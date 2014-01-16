@@ -130,7 +130,7 @@ def get_change_score(change):
     if change.size_diff > 0:
         chars_add = change.size_diff
     else:
-        chars_del = change.size_diff
+        chars_del = abs(change.size_diff)
     if change.change_type == 'new':
         new_page = 1
     return calc_score(chars_add, chars_del, new_page)

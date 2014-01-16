@@ -173,7 +173,7 @@
             {% endif %}
             <a href="{{ change.page.page_url }}">{{ change.page.page_title }}</a>
             {{ change.timestamp|timeago|safe }}
-            ({% if change.size_diff >= 0 %}<span class="plus-chars">+{% else %}<span class="minus-chars">-{% endif %}{{ change.size_diff }} chars</span>)
+            ({% if change.size_diff >= 0 %}<span class="plus-chars">+{% else %}<span class="minus-chars">{% endif %}{{ change.size_diff }} chars</span>)
             for
             <span class="wikipoints">
               {{ change_scores[change.id] }}

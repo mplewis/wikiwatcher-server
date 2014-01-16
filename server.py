@@ -1,36 +1,34 @@
 import config
 from models import User, Change
 
+import datetime
 from flask import Flask, render_template
-from datetime import datetime
 
 app = Flask(__name__)
 app.config.from_object(config.FlaskConfig)
 
 
-def parse_datetime(datetime_str, timeago=True):
-    date_obj = datetime.strptime(datetime_str.split('+')[0],
-                                 '%Y-%m-%d %H:%M:%S')
-    readable = date_obj.strftime('%Y-%m-%d at %I:%M %p')
+@app.template_filter()
+def timeago(datetime_object, timeago=True):
+    readable = datetime_object.strftime('%Y-%m-%d @ %H:%M')
     if not timeago:
         return readable
-    iso_format = date_obj.strftime('%Y-%m-%dT%H:%M:%SZ')
-    return ('<span class="timeago" title="%s">%s</span>' %
-            (iso_format, readable))
+    iso_format = datetime_object.strftime('%Y-%m-%dT%H:%M:%SZ')
+    return '<span class=timeago title="%s">%s</span>' % (iso_format, readable)
 
 
 def pct_from_ints(smaller, larger):
     return int(round(float(smaller) / larger * 100))
 
 
-def calc_user_score(chars_add, chars_del, new_pages):
+def calc_score(chars_add, chars_del, new_pages):
     scoring = config.ScoringConfig
     return (chars_add * scoring.char_add_points +
             chars_del * scoring.char_del_points +
             new_pages * scoring.new_page_points)
 
 
-def all_users_edit_chars_pcts():
+def all_users_edit_chars_pcts(period=datetime.timedelta(days=7)):
     """
     Get the following for all users:
 
@@ -52,6 +50,7 @@ def all_users_edit_chars_pcts():
       'score_pct': 12},
       {...}, ...]
     """
+    earliest_dt = datetime.datetime.now() - period
     users = []
     chars_max = 0
     score_max = 0
@@ -60,7 +59,7 @@ def all_users_edit_chars_pcts():
         pos_chars = 0
         neg_chars = 0
         new_pages = 0
-        for change in user.changes:
+        for change in user.changes.where(Change.timestamp > earliest_dt):
             diff = change.size_diff
             if diff >= 0:
                 pos_chars += diff
@@ -68,7 +67,7 @@ def all_users_edit_chars_pcts():
                 neg_chars -= diff
             if change.change_type == 'new':
                 new_pages += 1
-        score = calc_user_score(pos_chars, neg_chars, new_pages)
+        score = calc_score(pos_chars, neg_chars, new_pages)
         users.append({'username': username,
                       'pos_chars': pos_chars,
                       'neg_chars': neg_chars,
@@ -116,56 +115,40 @@ def all_users_edit_chars_pcts():
     return users
 
 
-def get_recent_change_descs(num_changes=
-                            config.LayoutConfig.num_recent_changes):
-    changelog = []
+def get_recent_changes(num_changes=
+                       config.LayoutConfig.num_recent_changes):
     changes = (Change.select()
                .order_by(Change.timestamp.desc())
                .limit(num_changes))
-    for change in changes:
-        username = change.user.username
-        pos_chars = 0
-        neg_chars = 0
-        new_pages = 0
-        if change.size_diff >= 0:
-            char_diff = ('<span class="plus-chars">+%s</span> chars' %
-                         change.size_diff)
-            pos_chars = change.size_diff
-        else:
-            char_diff = ('<span class="minus-chars">-%s</span> chars' %
-                         -change.size_diff)
-            neg_chars = change.size_diff
-        if change.change_type == 'new':
-            change_action = 'created page'
-            new_pages = 1
-        elif change.change_type == 'edit':
-            change_action = 'edited page'
-        page_title = change.page.page_title
-        page_url = '#'
-        page_link = '<a href="%s">%s</a>' % (page_url, page_title)
-        timeago = parse_datetime(change.timestamp)
-        points = calc_user_score(pos_chars, neg_chars, new_pages)
-        points_html = ('<span class="change-points">%s wikipoints</span>' %
-                       points)
-        # [Ckarpfinger]
-        # [created page]
-        # [What the f is git]
-        # [2 days ago]
-        # [(+31 chars)]
-        # for [9001 wikipoints].
-        summary_str = '<span class="username">%s</span> %s %s %s (%s) for %s.'
-        summary = summary_str % (username, change_action, page_link, timeago,
-                                 char_diff, points_html)
-        changelog.append({'summary': summary, 'change': change})
-    return changelog
+    return changes
+
+
+def get_change_score(change):
+    chars_add = 0
+    chars_del = 0
+    new_page = 0
+    if change.size_diff > 0:
+        chars_add = change.size_diff
+    else:
+        chars_del = change.size_diff
+    if change.change_type == 'new':
+        new_page = 1
+    return calc_score(chars_add, chars_del, new_page)
+
+
+def get_multiple_change_scores(changes):
+    return {c.id: get_change_score(c) for c in changes}
 
 
 @app.route('/')
 def index():
+    recent_changes = get_recent_changes()
+    change_scores = get_multiple_change_scores(recent_changes)
     return render_template('index.html',
                            users=all_users_edit_chars_pcts(),
                            scoring_config=config.ScoringConfig,
-                           recent_changes=get_recent_change_descs())
+                           recent_changes=recent_changes,
+                           change_scores=change_scores)
 
 if __name__ == '__main__':
     app.run()
